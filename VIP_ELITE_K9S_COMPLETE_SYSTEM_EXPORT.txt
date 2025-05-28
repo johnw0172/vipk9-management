@@ -1,0 +1,2776 @@
+=== VIP ELITE K9S COMPLETE SYSTEM EXPORT ===
+Data Persistence Issue: Client and dog data disappears on application restart despite using PostgreSQL database.
+
+=== ISSUE DESCRIPTION ===
+Problem: When the application restarts, all client and dog data disappears from the PostgreSQL database, even though the data is successfully created and stored during the session. The kennels and service pricing data persists correctly, but clients and dogs do not.
+
+Expected: Data should persist across application restarts when using PostgreSQL with Drizzle ORM.
+Actual: Client and dog data is lost on restart, requiring manual re-creation.
+
+=== PACKAGE.JSON ===
+{
+  "name": "rest-express",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server/index.ts",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "vite build",
+    "build:backend": "esbuild server/index.ts --bundle --platform=node --target=node18 --outfile=dist/index.js --external:@neondatabase/serverless",
+    "start": "node dist/index.js",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.10.0",
+    "@neondatabase/serverless": "^0.11.3",
+    "@radix-ui/react-accordion": "^1.2.1",
+    "@radix-ui/react-alert-dialog": "^1.1.2",
+    "@radix-ui/react-aspect-ratio": "^1.1.1",
+    "@radix-ui/react-avatar": "^1.1.1",
+    "@radix-ui/react-checkbox": "^1.1.2",
+    "@radix-ui/react-collapsible": "^1.1.1",
+    "@radix-ui/react-context-menu": "^2.2.2",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-dropdown-menu": "^2.1.2",
+    "@radix-ui/react-hover-card": "^1.1.2",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-menubar": "^1.1.2",
+    "@radix-ui/react-navigation-menu": "^1.2.1",
+    "@radix-ui/react-popover": "^1.1.2",
+    "@radix-ui/react-progress": "^1.1.1",
+    "@radix-ui/react-radio-group": "^1.2.1",
+    "@radix-ui/react-scroll-area": "^1.2.1",
+    "@radix-ui/react-select": "^2.1.2",
+    "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-slider": "^1.2.1",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-switch": "^1.1.1",
+    "@radix-ui/react-tabs": "^1.1.1",
+    "@radix-ui/react-toast": "^1.2.2",
+    "@radix-ui/react-toggle": "^1.1.0",
+    "@radix-ui/react-toggle-group": "^1.1.0",
+    "@radix-ui/react-tooltip": "^1.1.3",
+    "@tanstack/react-query": "^5.64.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.0.4",
+    "date-fns": "^4.1.0",
+    "drizzle-orm": "^0.38.2",
+    "drizzle-zod": "^0.5.1",
+    "embla-carousel-react": "^8.5.1",
+    "express": "^4.21.1",
+    "framer-motion": "^11.15.0",
+    "input-otp": "^1.4.1",
+    "lucide-react": "^0.468.0",
+    "next-themes": "^0.4.4",
+    "react": "^18.3.1",
+    "react-day-picker": "^9.4.4",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.53.2",
+    "react-resizable-panels": "^2.1.7",
+    "recharts": "^2.15.0",
+    "tailwind-merge": "^2.5.5",
+    "tailwindcss-animate": "^1.0.7",
+    "vaul": "^1.1.1",
+    "wouter": "^3.3.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.29.1",
+    "esbuild": "^0.24.1",
+    "postcss": "^8.5.11",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}
+
+=== DRIZZLE CONFIG (drizzle.config.ts) ===
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  schema: "./shared/schema.ts",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+});
+
+=== DATABASE SCHEMA (shared/schema.ts) ===
+import {
+  pgTable,
+  serial,
+  text,
+  varchar,
+  integer,
+  timestamp,
+  decimal,
+  boolean,
+  date,
+  jsonb,
+} from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+// Users table
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: varchar("username", { length: 50 }).notNull().unique(),
+  password: varchar("password", { length: 255 }).notNull(),
+  role: varchar("role", { length: 20 }).notNull().default("user"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Staff table
+export const staff = pgTable("staff", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull(),
+  pin: varchar("pin", { length: 4 }).notNull().unique(),
+  email: varchar("email", { length: 100 }),
+  phone: varchar("phone", { length: 20 }),
+  status: varchar("status", { length: 20 }).notNull().default("clocked_out"),
+  lastClockIn: timestamp("last_clock_in"),
+  lastClockOut: timestamp("last_clock_out"),
+  photo: text("photo"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Clients table
+export const clients = pgTable("clients", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  email: varchar("email", { length: 100 }).notNull().unique(),
+  phone: varchar("phone", { length: 20 }),
+  address: text("address"),
+  password: varchar("password", { length: 255 }),
+  emergencyContactName: varchar("emergency_contact_name", { length: 100 }),
+  emergencyContactPhone: varchar("emergency_contact_phone", { length: 20 }),
+  emergencyContactRelationship: varchar("emergency_contact_relationship", { length: 50 }),
+  vetName: varchar("vet_name", { length: 100 }),
+  vetPhone: varchar("vet_phone", { length: 20 }),
+  vetAddress: text("vet_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Dogs table
+export const dogs = pgTable("dogs", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  breed: varchar("breed", { length: 100 }),
+  age: integer("age"),
+  weight: varchar("weight", { length: 20 }),
+  photo: text("photo"),
+  feedingInstructions: text("feeding_instructions"),
+  medication: text("medication"),
+  behaviorNotes: text("behavior_notes"),
+  vetInfo: text("vet_info"),
+  allergies: text("allergies"),
+  exerciseRequirements: text("exercise_requirements"),
+  specialNotes: text("special_notes"),
+  emergencyContact: text("emergency_contact"),
+  weightUnit: varchar("weight_unit", { length: 10 }),
+  foodType: varchar("food_type", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Kennels table
+export const kennels = pgTable("kennels", {
+  id: serial("id").primaryKey(),
+  number: integer("number").notNull().unique(),
+  status: varchar("status", { length: 20 }).notNull().default("available"),
+  dogId: integer("dog_id"),
+  checkInDate: date("check_in_date"),
+  checkOutDate: date("check_out_date"),
+  size: varchar("size", { length: 20 }).notNull().default("medium"),
+  notes: text("notes"),
+  dogIds: jsonb("dog_ids").$type<number[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Jobs table
+export const jobs = pgTable("jobs", {
+  id: serial("id").primaryKey(),
+  staffId: integer("staff_id").notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  assignedDate: date("assigned_date").notNull(),
+  scheduledTime: varchar("scheduled_time", { length: 10 }),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Bookings table
+export const bookings = pgTable("bookings", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  dogId: integer("dog_id").notNull(),
+  serviceType: varchar("service_type", { length: 100 }).notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  duration: integer("duration"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Daily Reports table
+export const dailyReports = pgTable("daily_reports", {
+  id: serial("id").primaryKey(),
+  dogId: integer("dog_id").notNull(),
+  date: date("date").notNull(),
+  feeding: text("feeding"),
+  exercise: text("exercise"),
+  behavior: text("behavior"),
+  notes: text("notes"),
+  staffId: integer("staff_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Invoices table
+export const invoices = pgTable("invoices", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull(),
+  bookingId: integer("booking_id"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  dueDate: date("due_date"),
+  paidDate: date("paid_date"),
+  items: jsonb("items").$type<Array<{ description: string; amount: number; quantity: number }>>(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Time Entries table
+export const timeEntries = pgTable("time_entries", {
+  id: serial("id").primaryKey(),
+  staffId: integer("staff_id").notNull(),
+  clockInTime: timestamp("clock_in_time").notNull(),
+  clockOutTime: timestamp("clock_out_time"),
+  breakStartTime: timestamp("break_start_time"),
+  breakEndTime: timestamp("break_end_time"),
+  totalHours: decimal("total_hours", { precision: 5, scale: 2 }),
+  date: date("date").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Kennel Logs table
+export const kennelLogs = pgTable("kennel_logs", {
+  id: serial("id").primaryKey(),
+  kennelId: integer("kennel_id").notNull(),
+  dogId: integer("dog_id"),
+  staffId: integer("staff_id").notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Service Pricing table
+export const servicePricing = pgTable("service_pricing", {
+  id: serial("id").primaryKey(),
+  serviceName: varchar("service_name", { length: 100 }).notNull(),
+  serviceType: varchar("service_type", { length: 50 }).notNull().unique(),
+  basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
+  unit: varchar("unit", { length: 20 }).notNull().default("per_day"),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Insert schemas
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertStaffSchema = createInsertSchema(staff).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertClientSchema = createInsertSchema(clients).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDogSchema = createInsertSchema(dogs).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertKennelSchema = createInsertSchema(kennels).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDailyReportSchema = createInsertSchema(dailyReports).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTimeEntrySchema = createInsertSchema(timeEntries).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertKennelLogSchema = createInsertSchema(kennelLogs).omit({ id: true, createdAt: true });
+export const insertServicePricingSchema = createInsertSchema(servicePricing).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Types
+export type User = typeof users.$inferSelect;
+export type Staff = typeof staff.$inferSelect;
+export type Client = typeof clients.$inferSelect;
+export type Dog = typeof dogs.$inferSelect;
+export type Kennel = typeof kennels.$inferSelect;
+export type Job = typeof jobs.$inferSelect;
+export type Booking = typeof bookings.$inferSelect;
+export type DailyReport = typeof dailyReports.$inferSelect;
+export type Invoice = typeof invoices.$inferSelect;
+export type TimeEntry = typeof timeEntries.$inferSelect;
+export type KennelLog = typeof kennelLogs.$inferSelect;
+export type ServicePricing = typeof servicePricing.$inferSelect;
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertStaff = z.infer<typeof insertStaffSchema>;
+export type InsertClient = z.infer<typeof insertClientSchema>;
+export type InsertDog = z.infer<typeof insertDogSchema>;
+export type InsertKennel = z.infer<typeof insertKennelSchema>;
+export type InsertJob = z.infer<typeof insertJobSchema>;
+export type InsertBooking = z.infer<typeof insertBookingSchema>;
+export type InsertDailyReport = z.infer<typeof insertDailyReportSchema>;
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
+export type InsertKennelLog = z.infer<typeof insertKennelLogSchema>;
+export type InsertServicePricing = z.infer<typeof insertServicePricingSchema>;
+
+=== DATABASE CONNECTION (server/db.ts) ===
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import ws from "ws";
+import * as schema from "@shared/schema";
+
+neonConfig.webSocketConstructor = ws;
+
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL must be set. Did you forget to provision a database?",
+  );
+}
+
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const db = drizzle({ client: pool, schema });
+
+=== MAIN STORAGE INTERFACE (server/storage.ts) ===
+import {
+  users, staff, clients, dogs, kennels, jobs, bookings, dailyReports, invoices, timeEntries, kennelLogs, servicePricing,
+  type User, type Staff, type Client, type Dog, type Kennel, type Job, type Booking, type DailyReport, type Invoice, type TimeEntry, type KennelLog, type ServicePricing,
+  type InsertUser, type InsertStaff, type InsertClient, type InsertDog, type InsertKennel, type InsertJob, type InsertBooking, type InsertDailyReport, type InsertInvoice, type InsertTimeEntry, type InsertKennelLog, type InsertServicePricing
+} from "@shared/schema";
+
+export interface IStorage {
+  // Users
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
+  // Staff
+  getAllStaff(): Promise<Staff[]>;
+  getStaff(id: number): Promise<Staff | undefined>;
+  getStaffByPin(pin: string): Promise<Staff | undefined>;
+  createStaff(staff: InsertStaff): Promise<Staff>;
+  updateStaff(id: number, updates: Partial<Staff>): Promise<Staff | undefined>;
+
+  // Clients
+  getAllClients(): Promise<Client[]>;
+  getClient(id: number): Promise<Client | undefined>;
+  getClientByEmail(email: string): Promise<Client | undefined>;
+  createClient(client: InsertClient): Promise<Client>;
+  updateClient(id: number, updates: Partial<Client>): Promise<Client | undefined>;
+  deleteClient(id: number): Promise<boolean>;
+
+  // Dogs
+  getAllDogs(): Promise<Dog[]>;
+  getDog(id: number): Promise<Dog | undefined>;
+  getDogsByClient(clientId: number): Promise<Dog[]>;
+  createDog(dog: InsertDog): Promise<Dog>;
+  updateDog(id: number, updates: Partial<Dog>): Promise<Dog | undefined>;
+  deleteDog(id: number): Promise<boolean>;
+
+  // Kennels
+  getAllKennels(): Promise<Kennel[]>;
+  getKennel(id: number): Promise<Kennel | undefined>;
+  getKennelByNumber(number: number): Promise<Kennel | undefined>;
+  createKennel(kennel: InsertKennel): Promise<Kennel>;
+  updateKennel(id: number, updates: Partial<Kennel>): Promise<Kennel | undefined>;
+
+  // Jobs
+  getAllJobs(): Promise<Job[]>;
+  getJob(id: number): Promise<Job | undefined>;
+  getJobsByStaff(staffId: number): Promise<Job[]>;
+  getJobsByDate(date: string): Promise<Job[]>;
+  createJob(job: InsertJob): Promise<Job>;
+  updateJob(id: number, updates: Partial<Job>): Promise<Job | undefined>;
+
+  // Bookings
+  getAllBookings(): Promise<Booking[]>;
+  getBooking(id: number): Promise<Booking | undefined>;
+  getBookingsByClient(clientId: number): Promise<Booking[]>;
+  createBooking(booking: InsertBooking): Promise<Booking>;
+  updateBooking(id: number, updates: Partial<Booking>): Promise<Booking | undefined>;
+
+  // Daily Reports
+  getDailyReport(dogId: number, date: string): Promise<DailyReport | undefined>;
+  createDailyReport(report: InsertDailyReport): Promise<DailyReport>;
+  updateDailyReport(id: number, updates: Partial<DailyReport>): Promise<DailyReport | undefined>;
+
+  // Invoices
+  getAllInvoices(): Promise<Invoice[]>;
+  getInvoice(id: number): Promise<Invoice | undefined>;
+  getInvoicesByClient(clientId: number): Promise<Invoice[]>;
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  updateInvoice(id: number, updates: Partial<Invoice>): Promise<Invoice | undefined>;
+
+  // Time Entries
+  getAllTimeEntries(): Promise<TimeEntry[]>;
+  getTimeEntry(id: number): Promise<TimeEntry | undefined>;
+  getTimeEntriesByStaff(staffId: number): Promise<TimeEntry[]>;
+  getTimeEntriesByDate(date: string): Promise<TimeEntry[]>;
+  createTimeEntry(timeEntry: InsertTimeEntry): Promise<TimeEntry>;
+  updateTimeEntry(id: number, updates: Partial<TimeEntry>): Promise<TimeEntry | undefined>;
+
+  // Kennel Logs
+  getAllKennelLogs(): Promise<KennelLog[]>;
+  getKennelLog(id: number): Promise<KennelLog | undefined>;
+  getKennelLogsByKennel(kennelId: number): Promise<KennelLog[]>;
+  getKennelLogsByDog(dogId: number): Promise<KennelLog[]>;
+  getKennelLogsByStaff(staffId: number): Promise<KennelLog[]>;
+  getKennelLogsByDate(date: string): Promise<KennelLog[]>;
+  createKennelLog(kennelLog: InsertKennelLog): Promise<KennelLog>;
+  updateKennelLog(id: number, updates: Partial<KennelLog>): Promise<KennelLog | undefined>;
+
+  // Service Pricing
+  getAllServicePricing(): Promise<ServicePricing[]>;
+  getServicePricing(id: number): Promise<ServicePricing | undefined>;
+  getServicePricingByType(serviceType: string): Promise<ServicePricing | undefined>;
+  createServicePricing(pricing: InsertServicePricing): Promise<ServicePricing>;
+  updateServicePricing(id: number, updates: Partial<ServicePricing>): Promise<ServicePricing | undefined>;
+  deleteServicePricing(id: number): Promise<boolean>;
+}
+
+// Import the database storage
+import { storage as databaseStorage } from "./storage-database";
+export const storage = databaseStorage;
+
+=== DATABASE STORAGE IMPLEMENTATION (server/storage-database.ts) ===
+import {
+  users, staff, clients, dogs, kennels, jobs, bookings, dailyReports, invoices, timeEntries, kennelLogs, servicePricing,
+  type User, type Staff, type Client, type Dog, type Kennel, type Job, type Booking, type DailyReport, type Invoice, type TimeEntry, type KennelLog, type ServicePricing,
+  type InsertUser, type InsertStaff, type InsertClient, type InsertDog, type InsertKennel, type InsertJob, type InsertBooking, type InsertDailyReport, type InsertInvoice, type InsertTimeEntry, type InsertKennelLog, type InsertServicePricing
+} from "@shared/schema";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
+
+export interface IStorage {
+  // Users
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
+  // Staff
+  getAllStaff(): Promise<Staff[]>;
+  getStaff(id: number): Promise<Staff | undefined>;
+  getStaffByPin(pin: string): Promise<Staff | undefined>;
+  createStaff(staff: InsertStaff): Promise<Staff>;
+  updateStaff(id: number, updates: Partial<Staff>): Promise<Staff | undefined>;
+
+  // Clients
+  getAllClients(): Promise<Client[]>;
+  getClient(id: number): Promise<Client | undefined>;
+  getClientByEmail(email: string): Promise<Client | undefined>;
+  createClient(client: InsertClient): Promise<Client>;
+  updateClient(id: number, updates: Partial<Client>): Promise<Client | undefined>;
+  deleteClient(id: number): Promise<boolean>;
+
+  // Dogs
+  getAllDogs(): Promise<Dog[]>;
+  getDog(id: number): Promise<Dog | undefined>;
+  getDogsByClient(clientId: number): Promise<Dog[]>;
+  createDog(dog: InsertDog): Promise<Dog>;
+  updateDog(id: number, updates: Partial<Dog>): Promise<Dog | undefined>;
+  deleteDog(id: number): Promise<boolean>;
+
+  // Kennels
+  getAllKennels(): Promise<Kennel[]>;
+  getKennel(id: number): Promise<Kennel | undefined>;
+  getKennelByNumber(number: number): Promise<Kennel | undefined>;
+  createKennel(kennel: InsertKennel): Promise<Kennel>;
+  updateKennel(id: number | string, updates: Partial<Kennel>): Promise<Kennel | undefined>;
+
+  // Jobs
+  getAllJobs(): Promise<Job[]>;
+  getJob(id: number): Promise<Job | undefined>;
+  getJobsByStaff(staffId: number): Promise<Job[]>;
+  getJobsByDate(date: string): Promise<Job[]>;
+  createJob(job: InsertJob): Promise<Job>;
+  updateJob(id: number, updates: Partial<Job>): Promise<Job | undefined>;
+
+  // Bookings
+  getAllBookings(): Promise<Booking[]>;
+  getBooking(id: number): Promise<Booking | undefined>;
+  getBookingsByClient(clientId: number): Promise<Booking[]>;
+  createBooking(booking: InsertBooking): Promise<Booking>;
+  updateBooking(id: number, updates: Partial<Booking>): Promise<Booking | undefined>;
+
+  // Daily Reports
+  getDailyReport(dogId: number, date: string): Promise<DailyReport | undefined>;
+  createDailyReport(report: InsertDailyReport): Promise<DailyReport>;
+  updateDailyReport(id: number, updates: Partial<DailyReport>): Promise<DailyReport | undefined>;
+
+  // Invoices
+  getAllInvoices(): Promise<Invoice[]>;
+  getInvoice(id: number): Promise<Invoice | undefined>;
+  getInvoicesByClient(clientId: number): Promise<Invoice[]>;
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  updateInvoice(id: number, updates: Partial<Invoice>): Promise<Invoice | undefined>;
+
+  // Time Entries
+  getAllTimeEntries(): Promise<TimeEntry[]>;
+  getTimeEntry(id: number): Promise<TimeEntry | undefined>;
+  getTimeEntriesByStaff(staffId: number): Promise<TimeEntry[]>;
+  getTimeEntriesByDate(date: string): Promise<TimeEntry[]>;
+  createTimeEntry(timeEntry: InsertTimeEntry): Promise<TimeEntry>;
+  updateTimeEntry(id: number, updates: Partial<TimeEntry>): Promise<TimeEntry | undefined>;
+
+  // Kennel Logs
+  getAllKennelLogs(): Promise<KennelLog[]>;
+  getKennelLog(id: number): Promise<KennelLog | undefined>;
+  getKennelLogsByKennel(kennelId: number): Promise<KennelLog[]>;
+  getKennelLogsByDog(dogId: number): Promise<KennelLog[]>;
+  getKennelLogsByStaff(staffId: number): Promise<KennelLog[]>;
+  getKennelLogsByDate(date: string): Promise<KennelLog[]>;
+  createKennelLog(kennelLog: InsertKennelLog): Promise<KennelLog>;
+  updateKennelLog(id: number, updates: Partial<KennelLog>): Promise<KennelLog | undefined>;
+
+  // Service Pricing
+  getAllServicePricing(): Promise<ServicePricing[]>;
+  getServicePricing(id: number): Promise<ServicePricing | undefined>;
+  getServicePricingByType(serviceType: string): Promise<ServicePricing | undefined>;
+  createServicePricing(pricing: InsertServicePricing): Promise<ServicePricing>;
+  updateServicePricing(id: number, updates: Partial<ServicePricing>): Promise<ServicePricing | undefined>;
+  deleteServicePricing(id: number): Promise<boolean>;
+}
+
+class DatabaseStorage implements IStorage {
+  // Users
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  // Staff
+  async getAllStaff(): Promise<Staff[]> {
+    return await db.select().from(staff);
+  }
+
+  async getStaff(id: number): Promise<Staff | undefined> {
+    const [staffMember] = await db.select().from(staff).where(eq(staff.id, id));
+    return staffMember;
+  }
+
+  async getStaffByPin(pin: string): Promise<Staff | undefined> {
+    const [staffMember] = await db.select().from(staff).where(eq(staff.pin, pin));
+    return staffMember;
+  }
+
+  async createStaff(insertStaff: InsertStaff): Promise<Staff> {
+    const [staffMember] = await db.insert(staff).values(insertStaff).returning();
+    return staffMember;
+  }
+
+  async updateStaff(id: number, updates: Partial<Staff>): Promise<Staff | undefined> {
+    const [staffMember] = await db.update(staff).set({ ...updates, updatedAt: new Date() }).where(eq(staff.id, id)).returning();
+    return staffMember;
+  }
+
+  // Clients
+  async getAllClients(): Promise<Client[]> {
+    return await db.select().from(clients);
+  }
+
+  async getClient(id: number): Promise<Client | undefined> {
+    const [client] = await db.select().from(clients).where(eq(clients.id, id));
+    return client;
+  }
+
+  async getClientByEmail(email: string): Promise<Client | undefined> {
+    const [client] = await db.select().from(clients).where(eq(clients.email, email));
+    return client;
+  }
+
+  async createClient(insertClient: InsertClient): Promise<Client> {
+    const [client] = await db.insert(clients).values(insertClient).returning();
+    return client;
+  }
+
+  async updateClient(id: number, updates: Partial<Client>): Promise<Client | undefined> {
+    const [client] = await db.update(clients).set({ ...updates, updatedAt: new Date() }).where(eq(clients.id, id)).returning();
+    return client;
+  }
+
+  async deleteClient(id: number): Promise<boolean> {
+    const result = await db.delete(clients).where(eq(clients.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Dogs
+  async getAllDogs(): Promise<Dog[]> {
+    return await db.select().from(dogs);
+  }
+
+  async getDog(id: number): Promise<Dog | undefined> {
+    const [dog] = await db.select().from(dogs).where(eq(dogs.id, id));
+    return dog;
+  }
+
+  async getDogsByClient(clientId: number): Promise<Dog[]> {
+    return await db.select().from(dogs).where(eq(dogs.clientId, clientId));
+  }
+
+  async createDog(insertDog: InsertDog): Promise<Dog> {
+    const [dog] = await db.insert(dogs).values(insertDog).returning();
+    return dog;
+  }
+
+  async updateDog(id: number, updates: Partial<Dog>): Promise<Dog | undefined> {
+    const [dog] = await db.update(dogs).set({ ...updates, updatedAt: new Date() }).where(eq(dogs.id, id)).returning();
+    return dog;
+  }
+
+  async deleteDog(id: number): Promise<boolean> {
+    const result = await db.delete(dogs).where(eq(dogs.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Kennels
+  async getAllKennels(): Promise<Kennel[]> {
+    return await db.select().from(kennels);
+  }
+
+  async getKennel(id: number): Promise<Kennel | undefined> {
+    const [kennel] = await db.select().from(kennels).where(eq(kennels.id, id));
+    return kennel;
+  }
+
+  async getKennelByNumber(number: number): Promise<Kennel | undefined> {
+    const [kennel] = await db.select().from(kennels).where(eq(kennels.number, number));
+    return kennel;
+  }
+
+  async createKennel(insertKennel: InsertKennel): Promise<Kennel> {
+    const [kennel] = await db.insert(kennels).values(insertKennel).returning();
+    return kennel;
+  }
+
+  async updateKennel(id: number | string, updates: Partial<Kennel>): Promise<Kennel | undefined> {
+    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+    const [kennel] = await db.update(kennels).set({ ...updates, updatedAt: new Date() }).where(eq(kennels.id, numericId)).returning();
+    return kennel;
+  }
+
+  // Jobs
+  async getAllJobs(): Promise<Job[]> {
+    return await db.select().from(jobs);
+  }
+
+  async getJob(id: number): Promise<Job | undefined> {
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, id));
+    return job;
+  }
+
+  async getJobsByStaff(staffId: number): Promise<Job[]> {
+    return await db.select().from(jobs).where(eq(jobs.staffId, staffId));
+  }
+
+  async getJobsByDate(date: string): Promise<Job[]> {
+    return await db.select().from(jobs).where(eq(jobs.assignedDate, date));
+  }
+
+  async createJob(insertJob: InsertJob): Promise<Job> {
+    const [job] = await db.insert(jobs).values(insertJob).returning();
+    return job;
+  }
+
+  async updateJob(id: number, updates: Partial<Job>): Promise<Job | undefined> {
+    const [job] = await db.update(jobs).set({ ...updates, updatedAt: new Date() }).where(eq(jobs.id, id)).returning();
+    return job;
+  }
+
+  // Bookings
+  async getAllBookings(): Promise<Booking[]> {
+    return await db.select().from(bookings);
+  }
+
+  async getBooking(id: number): Promise<Booking | undefined> {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    return booking;
+  }
+
+  async getBookingsByClient(clientId: number): Promise<Booking[]> {
+    return await db.select().from(bookings).where(eq(bookings.clientId, clientId));
+  }
+
+  async createBooking(insertBooking: InsertBooking): Promise<Booking> {
+    const [booking] = await db.insert(bookings).values(insertBooking).returning();
+    return booking;
+  }
+
+  async updateBooking(id: number, updates: Partial<Booking>): Promise<Booking | undefined> {
+    const [booking] = await db.update(bookings).set({ ...updates, updatedAt: new Date() }).where(eq(bookings.id, id)).returning();
+    return booking;
+  }
+
+  // Daily Reports
+  async getDailyReport(dogId: number, date: string): Promise<DailyReport | undefined> {
+    const [report] = await db.select().from(dailyReports).where(and(eq(dailyReports.dogId, dogId), eq(dailyReports.date, date)));
+    return report;
+  }
+
+  async createDailyReport(insertReport: InsertDailyReport): Promise<DailyReport> {
+    const [report] = await db.insert(dailyReports).values(insertReport).returning();
+    return report;
+  }
+
+  async updateDailyReport(id: number, updates: Partial<DailyReport>): Promise<DailyReport | undefined> {
+    const [report] = await db.update(dailyReports).set({ ...updates, updatedAt: new Date() }).where(eq(dailyReports.id, id)).returning();
+    return report;
+  }
+
+  // Invoices
+  async getAllInvoices(): Promise<Invoice[]> {
+    return await db.select().from(invoices);
+  }
+
+  async getInvoice(id: number): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return invoice;
+  }
+
+  async getInvoicesByClient(clientId: number): Promise<Invoice[]> {
+    return await db.select().from(invoices).where(eq(invoices.clientId, clientId));
+  }
+
+  async createInvoice(insertInvoice: InsertInvoice): Promise<Invoice> {
+    const [invoice] = await db.insert(invoices).values(insertInvoice).returning();
+    return invoice;
+  }
+
+  async updateInvoice(id: number, updates: Partial<Invoice>): Promise<Invoice | undefined> {
+    const [invoice] = await db.update(invoices).set({ ...updates, updatedAt: new Date() }).where(eq(invoices.id, id)).returning();
+    return invoice;
+  }
+
+  // Time Entries
+  async getAllTimeEntries(): Promise<TimeEntry[]> {
+    return await db.select().from(timeEntries);
+  }
+
+  async getTimeEntry(id: number): Promise<TimeEntry | undefined> {
+    const [timeEntry] = await db.select().from(timeEntries).where(eq(timeEntries.id, id));
+    return timeEntry;
+  }
+
+  async getTimeEntriesByStaff(staffId: number): Promise<TimeEntry[]> {
+    return await db.select().from(timeEntries).where(eq(timeEntries.staffId, staffId));
+  }
+
+  async getTimeEntriesByDate(date: string): Promise<TimeEntry[]> {
+    return await db.select().from(timeEntries).where(eq(timeEntries.date, date));
+  }
+
+  async createTimeEntry(insertTimeEntry: InsertTimeEntry): Promise<TimeEntry> {
+    const [timeEntry] = await db.insert(timeEntries).values(insertTimeEntry).returning();
+    return timeEntry;
+  }
+
+  async updateTimeEntry(id: number, updates: Partial<TimeEntry>): Promise<TimeEntry | undefined> {
+    const [timeEntry] = await db.update(timeEntries).set({ ...updates, updatedAt: new Date() }).where(eq(timeEntries.id, id)).returning();
+    return timeEntry;
+  }
+
+  // Kennel Logs
+  async getAllKennelLogs(): Promise<KennelLog[]> {
+    return await db.select().from(kennelLogs);
+  }
+
+  async getKennelLog(id: number): Promise<KennelLog | undefined> {
+    const [kennelLog] = await db.select().from(kennelLogs).where(eq(kennelLogs.id, id));
+    return kennelLog;
+  }
+
+  async getKennelLogsByKennel(kennelId: number): Promise<KennelLog[]> {
+    return await db.select().from(kennelLogs).where(eq(kennelLogs.kennelId, kennelId));
+  }
+
+  async getKennelLogsByDog(dogId: number): Promise<KennelLog[]> {
+    return await db.select().from(kennelLogs).where(eq(kennelLogs.dogId, dogId));
+  }
+
+  async getKennelLogsByStaff(staffId: number): Promise<KennelLog[]> {
+    return await db.select().from(kennelLogs).where(eq(kennelLogs.staffId, staffId));
+  }
+
+  async getKennelLogsByDate(date: string): Promise<KennelLog[]> {
+    return await db.select().from(kennelLogs).where(eq(kennelLogs.timestamp, date));
+  }
+
+  async createKennelLog(insertKennelLog: InsertKennelLog): Promise<KennelLog> {
+    const [kennelLog] = await db.insert(kennelLogs).values(insertKennelLog).returning();
+    return kennelLog;
+  }
+
+  async updateKennelLog(id: number, updates: Partial<KennelLog>): Promise<KennelLog | undefined> {
+    const [kennelLog] = await db.update(kennelLogs).set(updates).where(eq(kennelLogs.id, id)).returning();
+    return kennelLog;
+  }
+
+  // Service Pricing
+  async getAllServicePricing(): Promise<ServicePricing[]> {
+    return await db.select().from(servicePricing);
+  }
+
+  async getServicePricing(id: number): Promise<ServicePricing | undefined> {
+    const [pricing] = await db.select().from(servicePricing).where(eq(servicePricing.id, id));
+    return pricing;
+  }
+
+  async getServicePricingByType(serviceType: string): Promise<ServicePricing | undefined> {
+    const [pricing] = await db.select().from(servicePricing).where(eq(servicePricing.serviceType, serviceType));
+    return pricing;
+  }
+
+  async createServicePricing(insertPricing: InsertServicePricing): Promise<ServicePricing> {
+    const [pricing] = await db.insert(servicePricing).values(insertPricing).returning();
+    return pricing;
+  }
+
+  async updateServicePricing(id: number, updates: Partial<ServicePricing>): Promise<ServicePricing | undefined> {
+    const [pricing] = await db.update(servicePricing).set({ ...updates, updatedAt: new Date() }).where(eq(servicePricing.id, id)).returning();
+    return pricing;
+  }
+
+  async deleteServicePricing(id: number): Promise<boolean> {
+    const result = await db.delete(servicePricing).where(eq(servicePricing.id, id));
+    return result.rowCount > 0;
+  }
+}
+
+export const storage = new DatabaseStorage();
+
+=== MAIN ROUTES (server/routes.ts) ===
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { insertClientSchema, insertDogSchema, insertStaffSchema, insertKennelSchema, insertJobSchema, insertBookingSchema, insertInvoiceSchema, insertServicePricingSchema } from "@shared/schema";
+import { z } from "zod";
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // Users
+  app.post("/api/users", async (req, res) => {
+    try {
+      const userData = req.body;
+      const user = await storage.createUser(userData);
+      res.json(user);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error creating user", error: error.message });
+    }
+  });
+
+  app.get("/api/users/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(user);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching user", error: error.message });
+    }
+  });
+
+  app.post("/api/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      const user = await storage.getUserByUsername(username);
+      
+      if (!user || user.password !== password) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+      
+      res.json({ message: "Login successful", user: { id: user.id, username: user.username, role: user.role } });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error during login", error: error.message });
+    }
+  });
+
+  // Staff routes
+  app.get("/api/staff", async (req, res) => {
+    try {
+      const staff = await storage.getAllStaff();
+      res.json(staff);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching staff", error: error.message });
+    }
+  });
+
+  app.get("/api/staff/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const staffMember = await storage.getStaff(id);
+      if (!staffMember) {
+        return res.status(404).json({ message: "Staff member not found" });
+      }
+      res.json(staffMember);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching staff member", error: error.message });
+    }
+  });
+
+  app.post("/api/staff", async (req, res) => {
+    try {
+      const validatedData = insertStaffSchema.parse(req.body);
+      const staff = await storage.createStaff(validatedData);
+      res.json(staff);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error creating staff member", error: error.message });
+    }
+  });
+
+  app.put("/api/staff/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      const staff = await storage.updateStaff(id, updates);
+      if (!staff) {
+        return res.status(404).json({ message: "Staff member not found" });
+      }
+      res.json(staff);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating staff member", error: error.message });
+    }
+  });
+
+  app.post("/api/staff/login", async (req, res) => {
+    try {
+      const { pin } = req.body;
+      const staff = await storage.getStaffByPin(pin);
+      
+      if (!staff) {
+        return res.status(401).json({ message: "Invalid PIN" });
+      }
+      
+      res.json({ message: "Login successful", staff });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error during staff login", error: error.message });
+    }
+  });
+
+  // Clients routes
+  app.get("/api/clients", async (req, res) => {
+    try {
+      const clients = await storage.getAllClients();
+      res.json(clients);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching clients", error: error.message });
+    }
+  });
+
+  app.get("/api/clients/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const client = await storage.getClient(id);
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      res.json(client);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching client", error: error.message });
+    }
+  });
+
+  app.post("/api/clients", async (req, res) => {
+    try {
+      const validatedData = insertClientSchema.parse(req.body);
+      const client = await storage.createClient(validatedData);
+      res.json(client);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error creating client", error: error.message });
+    }
+  });
+
+  app.put("/api/clients/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      console.log(`📝 Updating client ${id} with:`, updates);
+      const client = await storage.updateClient(id, updates);
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      console.log(`✅ Client updated successfully:`, client);
+      res.json(client);
+    } catch (error: any) {
+      console.error(`❌ Error updating client ${id}:`, error);
+      res.status(500).json({ message: "Error updating client", error: error.message });
+    }
+  });
+
+  app.delete("/api/clients/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteClient(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+      res.json({ message: "Client deleted successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error deleting client", error: error.message });
+    }
+  });
+
+  // Dogs routes
+  app.get("/api/dogs", async (req, res) => {
+    try {
+      const dogs = await storage.getAllDogs();
+      res.json(dogs);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching dogs", error: error.message });
+    }
+  });
+
+  app.get("/api/dogs/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const dog = await storage.getDog(id);
+      if (!dog) {
+        return res.status(404).json({ message: "Dog not found" });
+      }
+      res.json(dog);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching dog", error: error.message });
+    }
+  });
+
+  app.get("/api/dogs/client/:clientId", async (req, res) => {
+    try {
+      const clientId = parseInt(req.params.clientId);
+      const dogs = await storage.getDogsByClient(clientId);
+      res.json(dogs);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching dogs for client", error: error.message });
+    }
+  });
+
+  app.post("/api/dogs", async (req, res) => {
+    try {
+      const validatedData = insertDogSchema.parse(req.body);
+      const dog = await storage.createDog(validatedData);
+      res.json(dog);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error creating dog", error: error.message });
+    }
+  });
+
+  app.put("/api/dogs/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      console.log(`📝 Updating dog ${id} with:`, updates);
+      const dog = await storage.updateDog(id, updates);
+      if (!dog) {
+        return res.status(404).json({ message: "Dog not found" });
+      }
+      console.log(`✅ Dog updated successfully:`, dog);
+      res.json(dog);
+    } catch (error: any) {
+      console.error(`❌ Error updating dog ${id}:`, error);
+      res.status(500).json({ message: "Error updating dog", error: error.message });
+    }
+  });
+
+  app.delete("/api/dogs/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteDog(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Dog not found" });
+      }
+      res.json({ message: "Dog deleted successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error deleting dog", error: error.message });
+    }
+  });
+
+  // Kennels routes
+  app.get("/api/kennels", async (req, res) => {
+    try {
+      const kennels = await storage.getAllKennels();
+      res.json(kennels);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching kennels", error: error.message });
+    }
+  });
+
+  app.get("/api/kennels/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const kennel = await storage.getKennel(id);
+      if (!kennel) {
+        return res.status(404).json({ message: "Kennel not found" });
+      }
+      res.json(kennel);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching kennel", error: error.message });
+    }
+  });
+
+  app.post("/api/kennels", async (req, res) => {
+    try {
+      const validatedData = insertKennelSchema.parse(req.body);
+      const kennel = await storage.createKennel(validatedData);
+      res.json(kennel);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error creating kennel", error: error.message });
+    }
+  });
+
+  app.put("/api/kennels/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      const kennel = await storage.updateKennel(id, updates);
+      if (!kennel) {
+        return res.status(404).json({ message: "Kennel not found" });
+      }
+      res.json(kennel);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating kennel", error: error.message });
+    }
+  });
+
+  // Enhanced kennel assignment endpoint
+  app.post("/api/kennels/assign", async (req, res) => {
+    try {
+      console.log("🚀 ENHANCED KENNEL ASSIGNMENT STARTED");
+      console.log("📝 Request data:", {
+        kennelIds: req.body.kennelIds,
+        dogIds: req.body.dogIds,
+        checkInDate: req.body.checkInDate,
+        checkOutDate: req.body.checkOutDate
+      });
+
+      const { kennelId, dogIds, serviceType, startDate, endDate } = req.body;
+
+      if (!kennelId || !dogIds || !Array.isArray(dogIds) || dogIds.length === 0) {
+        return res.status(400).json({ message: "Invalid kennel or dog selection" });
+      }
+
+      // Get kennel
+      const kennel = await storage.getKennel(kennelId);
+      if (!kennel) {
+        return res.status(404).json({ message: "Kennel not found" });
+      }
+
+      // Get dogs to verify they exist and get client info
+      const dogs = await Promise.all(dogIds.map(id => storage.getDog(id)));
+      if (dogs.some(dog => !dog)) {
+        return res.status(404).json({ message: "One or more dogs not found" });
+      }
+
+      // Verify all dogs belong to the same client
+      const clientIds = [...new Set(dogs.map(dog => dog!.clientId))];
+      if (clientIds.length > 1) {
+        return res.status(400).json({ message: "All dogs must belong to the same client" });
+      }
+
+      const clientId = clientIds[0];
+
+      // Parse dates
+      const parsedStartDate = new Date(startDate);
+      const parsedEndDate = new Date(endDate);
+
+      // Create bookings for each dog
+      for (const dog of dogs) {
+        console.log(`🐕 Creating booking for ${dog!.name}:`, dog);
+        
+        const booking = await storage.createBooking({
+          clientId,
+          dogId: dog!.id,
+          serviceType: serviceType || 'boarding',
+          startDate: parsedStartDate.toISOString().split('T')[0],
+          endDate: parsedEndDate.toISOString().split('T')[0],
+          status: 'confirmed',
+          notes: `Kennel #${kennel.number} assignment`
+        });
+        
+        console.log("📅 NEW BOOKING CREATED:", booking);
+        console.log("📅 Booking dates:", { start: parsedStartDate, end: parsedEndDate });
+      }
+
+      // Update kennel with current dogIds array and set status
+      const currentDogIds = Array.isArray(kennel.dogIds) ? kennel.dogIds : [];
+      const updatedDogIds = [...new Set([...currentDogIds, ...dogIds])];
+      
+      const updatedKennel = await storage.updateKennel(kennelId, {
+        status: updatedDogIds.length > 0 ? 'occupied' : 'available',
+        dogId: dogIds[0], // Primary dog for compatibility
+        checkInDate: parsedStartDate.toISOString().split('T')[0],
+        checkOutDate: parsedEndDate.toISOString().split('T')[0],
+        dogIds: updatedDogIds
+      });
+
+      console.log("✅ Enhanced assignment complete:", updatedKennel);
+      console.log("🔍 Updated dogIds:", updatedDogIds);
+      console.log("🔍 dogIds type:", typeof updatedDogIds, Array.isArray(updatedDogIds));
+
+      res.json({
+        message: "Dogs assigned successfully",
+        kennel: updatedKennel,
+        assignedDogs: dogs
+      });
+
+    } catch (error: any) {
+      console.error("❌ Enhanced kennel assignment error:", error);
+      res.status(500).json({ message: "Error assigning dogs to kennel", error: error.message });
+    }
+  });
+
+  // Jobs routes
+  app.get("/api/jobs", async (req, res) => {
+    try {
+      const jobs = await storage.getAllJobs();
+      res.json(jobs);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching jobs", error: error.message });
+    }
+  });
+
+  app.get("/api/jobs/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const job = await storage.getJob(id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      res.json(job);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching job", error: error.message });
+    }
+  });
+
+  app.get("/api/jobs/staff/:staffId", async (req, res) => {
+    try {
+      const staffId = parseInt(req.params.staffId);
+      const jobs = await storage.getJobsByStaff(staffId);
+      res.json(jobs);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching jobs for staff", error: error.message });
+    }
+  });
+
+  app.get("/api/jobs/date/:date", async (req, res) => {
+    try {
+      const date = req.params.date;
+      const jobs = await storage.getJobsByDate(date);
+      res.json(jobs);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching jobs for date", error: error.message });
+    }
+  });
+
+  app.post("/api/jobs", async (req, res) => {
+    try {
+      const validatedData = insertJobSchema.parse(req.body);
+      const job = await storage.createJob(validatedData);
+      res.json(job);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error creating job", error: error.message });
+    }
+  });
+
+  app.put("/api/jobs/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      const job = await storage.updateJob(id, updates);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      res.json(job);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating job", error: error.message });
+    }
+  });
+
+  // Bookings routes
+  app.get("/api/bookings", async (req, res) => {
+    try {
+      const allBookings = await storage.getAllBookings();
+      // Filter out cancelled bookings
+      const activeBookings = allBookings.filter(booking => booking.status !== 'cancelled');
+      console.log(`📋 Returning ${activeBookings.length} active bookings out of ${allBookings.length} total`);
+      res.json(activeBookings);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching bookings", error: error.message });
+    }
+  });
+
+  app.get("/api/bookings/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const booking = await storage.getBooking(id);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      res.json(booking);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching booking", error: error.message });
+    }
+  });
+
+  app.get("/api/bookings/client/:clientId", async (req, res) => {
+    try {
+      const clientId = parseInt(req.params.clientId);
+      const bookings = await storage.getBookingsByClient(clientId);
+      res.json(bookings);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching bookings for client", error: error.message });
+    }
+  });
+
+  app.post("/api/bookings", async (req, res) => {
+    try {
+      const validatedData = insertBookingSchema.parse(req.body);
+      const booking = await storage.createBooking(validatedData);
+      res.json(booking);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error creating booking", error: error.message });
+    }
+  });
+
+  app.put("/api/bookings/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      const booking = await storage.updateBooking(id, updates);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      res.json(booking);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating booking", error: error.message });
+    }
+  });
+
+  // Invoices routes
+  app.get("/api/invoices", async (req, res) => {
+    try {
+      const invoices = await storage.getAllInvoices();
+      res.json(invoices);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching invoices", error: error.message });
+    }
+  });
+
+  app.get("/api/invoices/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const invoice = await storage.getInvoice(id);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json(invoice);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching invoice", error: error.message });
+    }
+  });
+
+  app.get("/api/invoices/client/:clientId", async (req, res) => {
+    try {
+      const clientId = parseInt(req.params.clientId);
+      const invoices = await storage.getInvoicesByClient(clientId);
+      res.json(invoices);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching invoices for client", error: error.message });
+    }
+  });
+
+  app.post("/api/invoices", async (req, res) => {
+    try {
+      const validatedData = insertInvoiceSchema.parse(req.body);
+      const invoice = await storage.createInvoice(validatedData);
+      res.json(invoice);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error creating invoice", error: error.message });
+    }
+  });
+
+  app.put("/api/invoices/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      const invoice = await storage.updateInvoice(id, updates);
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json(invoice);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating invoice", error: error.message });
+    }
+  });
+
+  // Service Pricing routes
+  app.get("/api/service-pricing", async (req, res) => {
+    try {
+      const pricing = await storage.getAllServicePricing();
+      res.json(pricing);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching service pricing", error: error.message });
+    }
+  });
+
+  app.get("/api/service-pricing/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const pricing = await storage.getServicePricing(id);
+      if (!pricing) {
+        return res.status(404).json({ message: "Service pricing not found" });
+      }
+      res.json(pricing);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching service pricing", error: error.message });
+    }
+  });
+
+  app.get("/api/service-pricing/type/:type", async (req, res) => {
+    try {
+      const type = req.params.type;
+      const pricing = await storage.getServicePricingByType(type);
+      if (!pricing) {
+        return res.status(404).json({ message: "Service pricing not found" });
+      }
+      res.json(pricing);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching service pricing", error: error.message });
+    }
+  });
+
+  app.post("/api/service-pricing", async (req, res) => {
+    try {
+      const validatedData = insertServicePricingSchema.parse(req.body);
+      const pricing = await storage.createServicePricing(validatedData);
+      res.json(pricing);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error creating service pricing", error: error.message });
+    }
+  });
+
+  app.put("/api/service-pricing/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      const pricing = await storage.updateServicePricing(id, updates);
+      if (!pricing) {
+        return res.status(404).json({ message: "Service pricing not found" });
+      }
+      res.json(pricing);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error updating service pricing", error: error.message });
+    }
+  });
+
+  app.delete("/api/service-pricing/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteServicePricing(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Service pricing not found" });
+      }
+      res.json({ message: "Service pricing deleted successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error deleting service pricing", error: error.message });
+    }
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}
+
+=== LOG ANALYSIS ===
+Looking at the workflow logs, I can see:
+
+1. Client and dog APIs return empty arrays: `GET /api/clients 200 in 1ms :: []` and `GET /api/dogs 200 in 0ms :: []`
+2. Database connection appears successful (no connection errors)
+3. Service pricing data persists correctly (shows actual pricing data)
+4. Kennel data persists correctly (shows kennel configurations)
+5. Staff data persists correctly (shows staff members)
+
+The issue appears to be specifically with clients and dogs tables losing data on restart, while other tables (kennels, staff, service_pricing) retain their data.
+
+This suggests either:
+- The clients/dogs tables are not being created correctly in the database
+- There's an issue with the database migration for these specific tables
+- The database connection is working but these specific tables are being truncated
+- There's a difference in how these tables are initialized vs other tables
+
+=== ADDITIONAL DEBUGGING NEEDED ===
+1. Check if the database tables are actually created with: `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';`
+2. Check if data exists in tables: `SELECT COUNT(*) FROM clients; SELECT COUNT(*) FROM dogs;`
+3. Verify the database schema matches expectations
+4. Check if there are any database constraints or foreign key issues preventing persistence
+5. Compare the initialization between working tables (kennels, staff) vs non-working tables (clients, dogs)
+
+=== MAIN SERVER (server/index.ts) ===
+import express from "express";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic } from "./vite";
+
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+(async () => {
+  const server = await registerRoutes(app);
+
+  if (process.env.NODE_ENV === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
+  }
+
+  const PORT = 5000;
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+})();
+
+=== MAIN FRONTEND APP (client/src/App.tsx) ===
+import { Switch, Route } from "wouter";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import Home from "@/pages/home";
+import AdminLogin from "@/pages/admin-login";
+import SimpleAdmin from "@/pages/simple-admin";
+import NotFound from "@/pages/not-found";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    },
+  },
+});
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/admin-login" component={AdminLogin} />
+        <Route path="/admin" component={SimpleAdmin} />
+        <Route component={NotFound} />
+      </Switch>
+      <Toaster />
+    </QueryClientProvider>
+  );
+}
+
+export default App;
+
+=== ADMIN DASHBOARD (client/src/pages/simple-admin.tsx) ===
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon, Search, Users, DogIcon, Home, Briefcase, Clock, UserCheck, Plus, Edit, X, Check } from 'lucide-react';
+import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+
+// Comprehensive admin dashboard with all VIP Elite K9s functionality
+const SimpleAdmin = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Fetch all data
+  const { data: staff } = useQuery({ queryKey: ['/api/staff'] });
+  const { data: clients } = useQuery({ queryKey: ['/api/clients'] });
+  const { data: dogs } = useQuery({ queryKey: ['/api/dogs'] });
+  const { data: kennels } = useQuery({ queryKey: ['/api/kennels'] });
+  const { data: servicePricing } = useQuery({ queryKey: ['/api/service-pricing'] });
+
+  // State management
+  const [activeTab, setActiveTab] = useState('overview');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Client form state
+  const [clientForm, setClientForm] = useState({
+    name: '', email: '', phone: '', address: '', password: '',
+    emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelationship: '',
+    vetName: '', vetPhone: '', vetAddress: ''
+  });
+
+  // Dog form state  
+  const [dogForm, setDogForm] = useState({
+    clientId: '', name: '', breed: '', age: '', weight: '', weightUnit: 'kg', foodType: '',
+    feedingInstructions: '', medication: '', behaviorNotes: '', vetInfo: '', allergies: '', exerciseRequirements: ''
+  });
+
+  // Staff form state
+  const [staffForm, setStaffForm] = useState({
+    name: '', role: '', pin: '', email: '', phone: ''
+  });
+
+  // Job form state
+  const [jobForm, setJobForm] = useState({
+    staffId: '', title: '', description: '', assignedDate: new Date(), scheduledTime: ''
+  });
+
+  // Kennel assignment state
+  const [kennelAssignment, setKennelAssignment] = useState({
+    kennelId: '', dogIds: [], serviceType: '', startDate: new Date(), endDate: new Date()
+  });
+
+  // Service pricing form state
+  const [pricingForm, setPricingForm] = useState({
+    serviceName: '', serviceType: '', basePrice: '', unit: 'per_day', description: ''
+  });
+
+  // Create mutations
+  const createClientMutation = useMutation({
+    mutationFn: (data) => apiRequest('POST', '/api/clients', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+      toast({ title: "Success", description: "Client created successfully" });
+      setClientForm({
+        name: '', email: '', phone: '', address: '', password: '',
+        emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelationship: '',
+        vetName: '', vetPhone: '', vetAddress: ''
+      });
+    }
+  });
+
+  const createDogMutation = useMutation({
+    mutationFn: (data) => apiRequest('POST', '/api/dogs', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dogs'] });
+      toast({ title: "Success", description: "Dog profile created successfully" });
+      setDogForm({
+        clientId: '', name: '', breed: '', age: '', weight: '', weightUnit: 'kg', foodType: '',
+        feedingInstructions: '', medication: '', behaviorNotes: '', vetInfo: '', allergies: '', exerciseRequirements: ''
+      });
+    }
+  });
+
+  const assignKennelMutation = useMutation({
+    mutationFn: (data) => apiRequest('POST', '/api/kennels/assign', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/kennels'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
+      toast({ title: "Success", description: "Dogs assigned to kennel successfully" });
+    }
+  });
+
+  const createServicePricingMutation = useMutation({
+    mutationFn: (data) => apiRequest('POST', '/api/service-pricing', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/service-pricing'] });
+      toast({ title: "Success", description: "Service pricing created successfully" });
+      setPricingForm({ serviceName: '', serviceType: '', basePrice: '', unit: 'per_day', description: '' });
+    }
+  });
+
+  // Filter functions
+  const filteredClients = clients?.filter(client => 
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredDogs = dogs?.filter(dog => 
+    dog.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    dog.breed?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Get kennel status color
+  const getKennelStatusColor = (kennel) => {
+    if (kennel.status === 'available') return 'bg-green-500';
+    if (kennel.status === 'occupied') {
+      const dogCount = Array.isArray(kennel.dogIds) ? kennel.dogIds.length : (kennel.dogId ? 1 : 0);
+      return dogCount >= 2 ? 'bg-orange-500' : 'bg-red-500';
+    }
+    if (kennel.status === 'cleaning') return 'bg-yellow-500';
+    return 'bg-gray-500';
+  };
+
+  // Get client name by ID
+  const getClientName = (clientId) => {
+    const client = clients?.find(c => c.id === clientId);
+    return client?.name || 'Unknown Client';
+  };
+
+  // Get dog name by ID
+  const getDogName = (dogId) => {
+    const dog = dogs?.find(d => d.id === dogId);
+    return dog?.name || 'Unknown Dog';
+  };
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      {/* Header */}
+      <div className="border-b border-yellow-600 bg-gradient-to-r from-black to-gray-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-lg flex items-center justify-center">
+                <DogIcon className="h-8 w-8 text-black" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white">VIP Elite K9s</h1>
+                <p className="text-yellow-400">Premium Kennel Management</p>
+              </div>
+            </div>
+            <Button 
+              variant="outline" 
+              className="border-yellow-600 text-yellow-400 hover:bg-yellow-600 hover:text-black"
+              onClick={() => window.location.href = '/'}
+            >
+              Back to Homepage
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
+          <TabsList className="grid w-full grid-cols-6 bg-gray-900 border border-yellow-600">
+            <TabsTrigger value="overview" className="data-[state=active]:bg-yellow-600 data-[state=active]:text-black">
+              <Home className="w-4 h-4 mr-2" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="clients" className="data-[state=active]:bg-yellow-600 data-[state=active]:text-black">
+              <Users className="w-4 h-4 mr-2" />
+              Clients
+            </TabsTrigger>
+            <TabsTrigger value="kennels" className="data-[state=active]:bg-yellow-600 data-[state=active]:text-black">
+              <Home className="w-4 h-4 mr-2" />
+              Kennels
+            </TabsTrigger>
+            <TabsTrigger value="staff" className="data-[state=active]:bg-yellow-600 data-[state=active]:text-black">
+              <UserCheck className="w-4 h-4 mr-2" />
+              Staff
+            </TabsTrigger>
+            <TabsTrigger value="jobs" className="data-[state=active]:bg-yellow-600 data-[state=active]:text-black">
+              <Briefcase className="w-4 h-4 mr-2" />
+              Jobs
+            </TabsTrigger>
+            <TabsTrigger value="pricing" className="data-[state=active]:bg-yellow-600 data-[state=active]:text-black">
+              <Clock className="w-4 h-4 mr-2" />
+              Pricing
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="bg-gray-900 border-yellow-600">
+                <CardHeader>
+                  <CardTitle className="text-yellow-400">Total Clients</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-white">{clients?.length || 0}</div>
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-gray-900 border-yellow-600">
+                <CardHeader>
+                  <CardTitle className="text-yellow-400">Total Dogs</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-white">{dogs?.length || 0}</div>
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-gray-900 border-yellow-600">
+                <CardHeader>
+                  <CardTitle className="text-yellow-400">Active Staff</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-white">
+                    {staff?.filter(member => member.status === 'clocked_in').length || 0}
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-gray-900 border-yellow-600">
+                <CardHeader>
+                  <CardTitle className="text-yellow-400">Available Kennels</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-white">
+                    {kennels?.filter(k => k.status === 'available').length || 0}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Kennel Grid Overview */}
+            <Card className="bg-gray-900 border-yellow-600">
+              <CardHeader>
+                <CardTitle className="text-yellow-400">Kennel Status Overview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-5 gap-4">
+                  {kennels?.map((kennel) => (
+                    <div
+                      key={kennel.id}
+                      className={`p-4 rounded-lg border-2 border-yellow-600 ${getKennelStatusColor(kennel)} text-white text-center font-semibold`}
+                    >
+                      <div className="text-lg">#{kennel.number}</div>
+                      <div className="text-xs mt-1 capitalize">{kennel.status}</div>
+                      {kennel.dogIds && kennel.dogIds.length > 0 && (
+                        <div className="text-xs mt-1">
+                          {kennel.dogIds.map(dogId => getDogName(dogId)).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Clients Tab */}
+          <TabsContent value="clients" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search clients..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-gray-900 border-yellow-600 text-white"
+                  />
+                </div>
+              </div>
+              
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="bg-yellow-600 text-black hover:bg-yellow-700">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Client
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-900 border-yellow-600 text-white max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle className="text-yellow-400">Add New Client</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-yellow-400">Name *</Label>
+                      <Input
+                        value={clientForm.name}
+                        onChange={(e) => setClientForm({...clientForm, name: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Email *</Label>
+                      <Input
+                        value={clientForm.email}
+                        onChange={(e) => setClientForm({...clientForm, email: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Phone</Label>
+                      <Input
+                        value={clientForm.phone}
+                        onChange={(e) => setClientForm({...clientForm, phone: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Password</Label>
+                      <Input
+                        type="password"
+                        value={clientForm.password}
+                        onChange={(e) => setClientForm({...clientForm, password: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-yellow-400">Address</Label>
+                      <Textarea
+                        value={clientForm.address}
+                        onChange={(e) => setClientForm({...clientForm, address: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Emergency Contact Name</Label>
+                      <Input
+                        value={clientForm.emergencyContactName}
+                        onChange={(e) => setClientForm({...clientForm, emergencyContactName: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Emergency Contact Phone</Label>
+                      <Input
+                        value={clientForm.emergencyContactPhone}
+                        onChange={(e) => setClientForm({...clientForm, emergencyContactPhone: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Emergency Contact Relationship</Label>
+                      <Input
+                        value={clientForm.emergencyContactRelationship}
+                        onChange={(e) => setClientForm({...clientForm, emergencyContactRelationship: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Vet Name</Label>
+                      <Input
+                        value={clientForm.vetName}
+                        onChange={(e) => setClientForm({...clientForm, vetName: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Vet Phone</Label>
+                      <Input
+                        value={clientForm.vetPhone}
+                        onChange={(e) => setClientForm({...clientForm, vetPhone: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-yellow-400">Vet Address</Label>
+                      <Textarea
+                        value={clientForm.vetAddress}
+                        onChange={(e) => setClientForm({...clientForm, vetAddress: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button 
+                      onClick={() => createClientMutation.mutate(clientForm)}
+                      className="bg-yellow-600 text-black hover:bg-yellow-700"
+                      disabled={createClientMutation.isPending}
+                    >
+                      {createClientMutation.isPending ? 'Creating...' : 'Create Client'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Clients List */}
+            <div className="grid gap-4">
+              {filteredClients?.map((client) => (
+                <Card key={client.id} className="bg-gray-900 border-yellow-600">
+                  <CardContent className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-2">
+                        <h3 className="text-xl font-semibold text-yellow-400">{client.name}</h3>
+                        <p className="text-gray-300">{client.email}</p>
+                        <p className="text-gray-300">{client.phone}</p>
+                        {client.address && <p className="text-gray-400">{client.address}</p>}
+                      </div>
+                      <div className="text-right space-y-2">
+                        <p className="text-sm text-gray-400">Emergency: {client.emergencyContactName}</p>
+                        <p className="text-sm text-gray-400">{client.emergencyContactPhone}</p>
+                        <p className="text-sm text-gray-400">Vet: {client.vetName}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Client's Dogs */}
+                    <div className="mt-4">
+                      <h4 className="text-lg font-medium text-yellow-400 mb-2">Dogs</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {dogs?.filter(dog => dog.clientId === client.id).map((dog) => (
+                          <div key={dog.id} className="bg-gray-800 p-3 rounded border border-gray-600">
+                            <h5 className="font-medium text-white">{dog.name}</h5>
+                            <p className="text-sm text-gray-400">{dog.breed} • {dog.age} years • {dog.weight}{dog.weightUnit}</p>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Add Dog Button */}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-3 border-yellow-600 text-yellow-400 hover:bg-yellow-600 hover:text-black"
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add Dog
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-gray-900 border-yellow-600 text-white max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle className="text-yellow-400">Add Dog for {client.name}</DialogTitle>
+                          </DialogHeader>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-yellow-400">Name *</Label>
+                              <Input
+                                value={dogForm.name}
+                                onChange={(e) => setDogForm({...dogForm, name: e.target.value, clientId: client.id.toString()})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-yellow-400">Breed</Label>
+                              <Input
+                                value={dogForm.breed}
+                                onChange={(e) => setDogForm({...dogForm, breed: e.target.value})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-yellow-400">Age</Label>
+                              <Input
+                                type="number"
+                                value={dogForm.age}
+                                onChange={(e) => setDogForm({...dogForm, age: e.target.value})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-yellow-400">Weight</Label>
+                              <div className="flex space-x-2">
+                                <Input
+                                  value={dogForm.weight}
+                                  onChange={(e) => setDogForm({...dogForm, weight: e.target.value})}
+                                  className="bg-gray-800 border-yellow-600"
+                                />
+                                <Select value={dogForm.weightUnit} onValueChange={(value) => setDogForm({...dogForm, weightUnit: value})}>
+                                  <SelectTrigger className="w-20 bg-gray-800 border-yellow-600">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-gray-800 border-yellow-600">
+                                    <SelectItem value="kg">kg</SelectItem>
+                                    <SelectItem value="lbs">lbs</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-yellow-400">Food Type</Label>
+                              <Select value={dogForm.foodType} onValueChange={(value) => setDogForm({...dogForm, foodType: value})}>
+                                <SelectTrigger className="bg-gray-800 border-yellow-600">
+                                  <SelectValue placeholder="Select food type" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-gray-800 border-yellow-600">
+                                  <SelectItem value="Dry Kibble">Dry Kibble</SelectItem>
+                                  <SelectItem value="Wet Food">Wet Food</SelectItem>
+                                  <SelectItem value="Raw Diet">Raw Diet</SelectItem>
+                                  <SelectItem value="Mixed Diet">Mixed Diet</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-yellow-400">Feeding Instructions</Label>
+                              <Textarea
+                                value={dogForm.feedingInstructions}
+                                onChange={(e) => setDogForm({...dogForm, feedingInstructions: e.target.value})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-yellow-400">Exercise Requirements</Label>
+                              <Textarea
+                                value={dogForm.exerciseRequirements}
+                                onChange={(e) => setDogForm({...dogForm, exerciseRequirements: e.target.value})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-yellow-400">Medication</Label>
+                              <Input
+                                value={dogForm.medication}
+                                onChange={(e) => setDogForm({...dogForm, medication: e.target.value})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-yellow-400">Allergies</Label>
+                              <Input
+                                value={dogForm.allergies}
+                                onChange={(e) => setDogForm({...dogForm, allergies: e.target.value})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-yellow-400">Behavior Notes</Label>
+                              <Textarea
+                                value={dogForm.behaviorNotes}
+                                onChange={(e) => setDogForm({...dogForm, behaviorNotes: e.target.value})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-yellow-400">Vet Information</Label>
+                              <Textarea
+                                value={dogForm.vetInfo}
+                                onChange={(e) => setDogForm({...dogForm, vetInfo: e.target.value})}
+                                className="bg-gray-800 border-yellow-600"
+                              />
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button 
+                              onClick={() => createDogMutation.mutate(dogForm)}
+                              className="bg-yellow-600 text-black hover:bg-yellow-700"
+                              disabled={createDogMutation.isPending}
+                            >
+                              {createDogMutation.isPending ? 'Creating...' : 'Add Dog'}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Kennels Tab */}
+          <TabsContent value="kennels" className="space-y-6">
+            <Card className="bg-gray-900 border-yellow-600">
+              <CardHeader>
+                <CardTitle className="text-yellow-400">Kennel Management</CardTitle>
+                <CardDescription className="text-gray-400">
+                  Manage kennel assignments and availability
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-5 gap-4 mb-6">
+                  {kennels?.map((kennel) => (
+                    <Dialog key={kennel.id}>
+                      <DialogTrigger asChild>
+                        <div
+                          className={`p-4 rounded-lg border-2 border-yellow-600 cursor-pointer transition-all hover:scale-105 ${getKennelStatusColor(kennel)} text-white text-center font-semibold`}
+                        >
+                          <div className="text-lg">#{kennel.number}</div>
+                          <div className="text-xs mt-1 capitalize">{kennel.status}</div>
+                          {kennel.dogIds && kennel.dogIds.length > 0 && (
+                            <div className="text-xs mt-1">
+                              {kennel.dogIds.map(dogId => getDogName(dogId)).join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      </DialogTrigger>
+                      <DialogContent className="bg-gray-900 border-yellow-600 text-white max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle className="text-yellow-400">Kennel #{kennel.number} Assignment</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <Label className="text-yellow-400">Service Type</Label>
+                            <Select 
+                              value={kennelAssignment.serviceType} 
+                              onValueChange={(value) => setKennelAssignment({...kennelAssignment, serviceType: value})}
+                            >
+                              <SelectTrigger className="bg-gray-800 border-yellow-600">
+                                <SelectValue placeholder="Select service" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-gray-800 border-yellow-600">
+                                {servicePricing?.map((pricing) => (
+                                  <SelectItem key={pricing.id} value={pricing.serviceType}>
+                                    {pricing.serviceName} - £{pricing.basePrice}/{pricing.unit}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label className="text-yellow-400">Select Dogs</Label>
+                            <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
+                              <Input
+                                placeholder="Search dogs..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="mb-3 bg-gray-800 border-yellow-600"
+                              />
+                              {dogs?.filter(dog => 
+                                dog.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                getClientName(dog.clientId).toLowerCase().includes(searchTerm.toLowerCase())
+                              ).map((dog) => (
+                                <div key={dog.id} className="flex items-center space-x-3 p-2 bg-gray-800 rounded border">
+                                  <input
+                                    type="checkbox"
+                                    checked={kennelAssignment.dogIds.includes(dog.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setKennelAssignment({
+                                          ...kennelAssignment, 
+                                          dogIds: [...kennelAssignment.dogIds, dog.id]
+                                        });
+                                      } else {
+                                        setKennelAssignment({
+                                          ...kennelAssignment,
+                                          dogIds: kennelAssignment.dogIds.filter(id => id !== dog.id)
+                                        });
+                                      }
+                                    }}
+                                    className="rounded"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-medium text-white">{dog.name} ({dog.breed})</span>
+                                      <span className="text-sm text-gray-400">{dog.weight}kg</span>
+                                    </div>
+                                    <div className="text-sm text-gray-400">Owner: {getClientName(dog.clientId)}</div>
+                                  </div>
+                                  {kennelAssignment.dogIds.includes(dog.id) && (
+                                    <Check className="h-4 w-4 text-green-500" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-yellow-400">Check-in Date</Label>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start text-left bg-gray-800 border-yellow-600"
+                                  >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {kennelAssignment.startDate ? format(kennelAssignment.startDate, "PPP") : "Pick a date"}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0 bg-gray-800 border-yellow-600">
+                                  <Calendar
+                                    mode="single"
+                                    selected={kennelAssignment.startDate}
+                                    onSelect={(date) => setKennelAssignment({...kennelAssignment, startDate: date})}
+                                    className="text-white"
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            <div>
+                              <Label className="text-yellow-400">Check-out Date</Label>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start text-left bg-gray-800 border-yellow-600"
+                                  >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {kennelAssignment.endDate ? format(kennelAssignment.endDate, "PPP") : "Pick a date"}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0 bg-gray-800 border-yellow-600">
+                                  <Calendar
+                                    mode="single"
+                                    selected={kennelAssignment.endDate}
+                                    onSelect={(date) => setKennelAssignment({...kennelAssignment, endDate: date})}
+                                    className="text-white"
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button 
+                            onClick={() => {
+                              const assignmentData = {
+                                kennelId: kennel.id,
+                                dogIds: kennelAssignment.dogIds,
+                                serviceType: kennelAssignment.serviceType,
+                                startDate: kennelAssignment.startDate.toISOString().split('T')[0],
+                                endDate: kennelAssignment.endDate.toISOString().split('T')[0]
+                              };
+                              assignKennelMutation.mutate(assignmentData);
+                            }}
+                            className="bg-yellow-600 text-black hover:bg-yellow-700"
+                            disabled={assignKennelMutation.isPending || kennelAssignment.dogIds.length === 0}
+                          >
+                            {assignKennelMutation.isPending ? 'Assigning...' : 'Assign Dogs'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  ))}
+                </div>
+
+                {/* Legend */}
+                <div className="flex justify-center space-x-6 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-green-500 rounded"></div>
+                    <span>Available</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-red-500 rounded"></div>
+                    <span>One Dog</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-orange-500 rounded"></div>
+                    <span>Two Dogs</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-yellow-500 rounded"></div>
+                    <span>Cleaning</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Staff Tab */}
+          <TabsContent value="staff" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-yellow-400">Staff Management</h2>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="bg-yellow-600 text-black hover:bg-yellow-700">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Staff Member
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-900 border-yellow-600 text-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-yellow-400">Add New Staff Member</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-yellow-400">Name *</Label>
+                      <Input
+                        value={staffForm.name}
+                        onChange={(e) => setStaffForm({...staffForm, name: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Role *</Label>
+                      <Input
+                        value={staffForm.role}
+                        onChange={(e) => setStaffForm({...staffForm, role: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">PIN (4 digits) *</Label>
+                      <Input
+                        value={staffForm.pin}
+                        onChange={(e) => setStaffForm({...staffForm, pin: e.target.value})}
+                        maxLength={4}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Email</Label>
+                      <Input
+                        value={staffForm.email}
+                        onChange={(e) => setStaffForm({...staffForm, email: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Phone</Label>
+                      <Input
+                        value={staffForm.phone}
+                        onChange={(e) => setStaffForm({...staffForm, phone: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button className="bg-yellow-600 text-black hover:bg-yellow-700">
+                      Add Staff Member
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Staff Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {staff?.map((member) => (
+                <Card key={member.id} className="bg-gray-900 border-yellow-600">
+                  <CardContent className="p-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full flex items-center justify-center">
+                        <span className="text-black font-bold text-lg">{member.name.charAt(0)}</span>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-yellow-400">{member.name}</h3>
+                        <p className="text-sm text-gray-400">{member.role}</p>
+                        <Badge 
+                          variant={member.status === 'clocked_in' ? 'default' : 'secondary'}
+                          className={member.status === 'clocked_in' ? 'bg-green-600' : 'bg-gray-600'}
+                        >
+                          {member.status === 'clocked_in' ? 'Clocked In' : 
+                           member.status === 'on_break' ? 'On Break' : 'Clocked Out'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="mt-4 text-sm text-gray-400">
+                      <p>PIN: {member.pin}</p>
+                      {member.email && <p>Email: {member.email}</p>}
+                      {member.phone && <p>Phone: {member.phone}</p>}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Jobs Tab */}
+          <TabsContent value="jobs" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-yellow-400">Job Management</h2>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="bg-yellow-600 text-black hover:bg-yellow-700">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Job
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-900 border-yellow-600 text-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-yellow-400">Create New Job</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-yellow-400">Assign to Staff *</Label>
+                      <Select 
+                        value={jobForm.staffId} 
+                        onValueChange={(value) => setJobForm({...jobForm, staffId: value})}
+                      >
+                        <SelectTrigger className="bg-gray-800 border-yellow-600">
+                          <SelectValue placeholder="Select staff member" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-800 border-yellow-600">
+                          {staff?.map((member) => (
+                            <SelectItem key={member.id} value={member.id.toString()}>
+                              {member.name} - {member.role}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Job Title *</Label>
+                      <Input
+                        value={jobForm.title}
+                        onChange={(e) => setJobForm({...jobForm, title: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Description</Label>
+                      <Textarea
+                        value={jobForm.description}
+                        onChange={(e) => setJobForm({...jobForm, description: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Scheduled Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left bg-gray-800 border-yellow-600"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {jobForm.assignedDate ? format(jobForm.assignedDate, "PPP") : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 bg-gray-800 border-yellow-600">
+                          <Calendar
+                            mode="single"
+                            selected={jobForm.assignedDate}
+                            onSelect={(date) => setJobForm({...jobForm, assignedDate: date})}
+                            className="text-white"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Scheduled Time</Label>
+                      <Input
+                        type="time"
+                        value={jobForm.scheduledTime}
+                        onChange={(e) => setJobForm({...jobForm, scheduledTime: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button className="bg-yellow-600 text-black hover:bg-yellow-700">
+                      Create Job
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Jobs List */}
+            <div className="space-y-4">
+              {/* Jobs would be displayed here - placeholder for now */}
+              <Card className="bg-gray-900 border-yellow-600">
+                <CardContent className="p-6">
+                  <p className="text-gray-400 text-center">No jobs assigned yet. Create your first job above.</p>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Pricing Tab */}
+          <TabsContent value="pricing" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-yellow-400">Service Pricing Management</h2>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="bg-yellow-600 text-black hover:bg-yellow-700">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Service
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-900 border-yellow-600 text-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-yellow-400">Add New Service Pricing</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-yellow-400">Service Name *</Label>
+                      <Input
+                        value={pricingForm.serviceName}
+                        onChange={(e) => setPricingForm({...pricingForm, serviceName: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                        placeholder="e.g., Premium Boarding"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Service Type *</Label>
+                      <Input
+                        value={pricingForm.serviceType}
+                        onChange={(e) => setPricingForm({...pricingForm, serviceType: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                        placeholder="e.g., boarding"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Base Price (£) *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={pricingForm.basePrice}
+                        onChange={(e) => setPricingForm({...pricingForm, basePrice: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                        placeholder="50.00"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Unit *</Label>
+                      <Select 
+                        value={pricingForm.unit} 
+                        onValueChange={(value) => setPricingForm({...pricingForm, unit: value})}
+                      >
+                        <SelectTrigger className="bg-gray-800 border-yellow-600">
+                          <SelectValue placeholder="Select unit" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-800 border-yellow-600">
+                          <SelectItem value="per_day">Per Day</SelectItem>
+                          <SelectItem value="per_night">Per Night</SelectItem>
+                          <SelectItem value="per_session">Per Session</SelectItem>
+                          <SelectItem value="per_hour">Per Hour</SelectItem>
+                          <SelectItem value="per_walk">Per Walk</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-yellow-400">Description</Label>
+                      <Textarea
+                        value={pricingForm.description}
+                        onChange={(e) => setPricingForm({...pricingForm, description: e.target.value})}
+                        className="bg-gray-800 border-yellow-600"
+                        placeholder="Service description..."
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button 
+                      onClick={() => createServicePricingMutation.mutate(pricingForm)}
+                      className="bg-yellow-600 text-black hover:bg-yellow-700"
+                      disabled={createServicePricingMutation.isPending}
+                    >
+                      {createServicePricingMutation.isPending ? 'Creating...' : 'Add Service'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Pricing List */}
+            <div className="grid gap-4">
+              {servicePricing?.map((pricing) => (
+                <Card key={pricing.id} className="bg-gray-900 border-yellow-600">
+                  <CardContent className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-xl font-semibold text-yellow-400">{pricing.serviceName}</h3>
+                        <p className="text-gray-400">{pricing.serviceType}</p>
+                        <p className="text-2xl font-bold text-white mt-2">£{pricing.basePrice}</p>
+                        <p className="text-sm text-gray-400">{pricing.unit}</p>
+                        {pricing.description && (
+                          <p className="text-gray-300 mt-2">{pricing.description}</p>
+                        )}
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-yellow-600 text-yellow-400 hover:bg-yellow-600 hover:text-black"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+};
+
+export default SimpleAdmin;
+
+=== QUERY CLIENT (client/src/lib/queryClient.ts) ===
+import { QueryClient } from "@tanstack/react-query";
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: async ({ queryKey }) => {
+        const url = queryKey[0] as string;
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      },
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+export async function apiRequest(method: string, url: string, data?: any) {
+  const options: RequestInit = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  };
+
+  if (data) {
+    options.body = JSON.stringify(data);
+  }
+
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return response;
+}
+
+=== ENVIRONMENT VARIABLES ===
+Required environment variables:
+- DATABASE_URL: PostgreSQL connection string (provided by Replit)
+- PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE: Database connection details (provided by Replit)
+
+=== SUMMARY OF ISSUE ===
+The system is configured to use PostgreSQL database with Drizzle ORM, but client and dog data disappears on application restart while other data (kennels, staff, service pricing) persists correctly. The database connection appears to work, and the storage implementation uses the same patterns for all tables. The issue appears to be specific to the clients and dogs tables not retaining data between sessions, suggesting either:
+
+1. Database schema/migration issues for these specific tables
+2. Different initialization patterns between working/non-working tables  
+3. Foreign key constraints or data validation preventing persistence
+4. Transaction/commit issues specific to client/dog operations
+
+The complete codebase above shows all components working together in a comprehensive kennel management system with proper TypeScript types, React Query integration, and database operations.
+
+=== END EXPORT ===
